@@ -1,0 +1,17 @@
+[project]
+name = "codex-recovery"
+version = "0.1.0"
+description = "A Windows UI Automation watcher for Codex model-capacity errors"
+requires-python = ">=3.12"
+dependencies = [
+    "pywinauto>=0.6.9",
+    "pywin32>=306",
+    "comtypes>=1.4.0",
+]
+
+[project.scripts]
+codex-recover = "codex_recovery.cli:main"
+codex-recovery = "codex_recovery.tray_app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
