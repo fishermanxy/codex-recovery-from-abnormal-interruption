@@ -1,4 +1,7 @@
+import pytest
+
 from codex_recovery.uia import UiaWindowSource
+from codex_recovery.uia import UiaSnapshotError
 
 
 class FakeElementInfo:
@@ -16,12 +19,14 @@ class FakeControl:
         self._role = role
         self._name = name
         self._fail_enabled = fail_enabled
+        self.invoked = False
 
     @property
     def element_info(self):
         info = FakeElementInfo()
         info.control_type = self._role
         info.name = self._name
+        info.runtime_id = (id(self),)
         return info
 
     def children(self):
@@ -37,6 +42,9 @@ class FakeControl:
 
     def window_text(self):
         return self._name
+
+    def invoke(self):
+        self.invoked = True
 
 
 def test_snapshot_keeps_working_when_an_unrelated_control_is_unavailable():
@@ -60,3 +68,27 @@ def test_snapshot_marks_an_unreadable_button_as_disabled():
     snapshot = UiaWindowSource(root).snapshot()
 
     assert snapshot.children[0].enabled is False
+
+
+def test_click_revalidates_the_control_before_invoking_it():
+    button = FakeControl(role="Button", name="重试")
+    root = FakeControl(children=(button,))
+    source = UiaWindowSource(root)
+    snapshot = source.snapshot()
+
+    source.click(snapshot.children[0])
+
+    assert button.invoked is True
+
+
+def test_click_rejects_a_control_whose_name_changed():
+    button = FakeControl(role="Button", name="重试")
+    root = FakeControl(children=(button,))
+    source = UiaWindowSource(root)
+    snapshot = source.snapshot()
+    button._name = "发送"
+
+    with pytest.raises(UiaSnapshotError):
+        source.click(snapshot.children[0])
+
+    assert button.invoked is False
