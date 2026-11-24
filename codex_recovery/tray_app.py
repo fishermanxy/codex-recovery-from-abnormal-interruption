@@ -161,6 +161,7 @@ class WatchWorker:
 
             paused_reported = False
             try:
+                new_connection = False
                 if self._watcher is None:
                     self._source = UiaWindowSource.connect(
                         title=self._config.window_title
@@ -169,9 +170,11 @@ class WatchWorker:
                         self._source.snapshot,
                         self._source.click,
                     )
-                    self._on_event(WorkerEvent("listening"))
+                    new_connection = True
 
                 result = self._watcher.poll_once()
+                if new_connection:
+                    self._on_event(WorkerEvent("listening"))
                 self._on_event(
                     WorkerEvent(
                         status=result.status,

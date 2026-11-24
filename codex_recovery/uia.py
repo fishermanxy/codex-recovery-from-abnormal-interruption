@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .detector import AccessibleNode
+
+LOGGER = logging.getLogger("codex_recovery.uia")
 
 
 class UiaSnapshotError(RuntimeError):
@@ -36,7 +39,7 @@ class UiaWindowSource:
 
     def snapshot(self) -> AccessibleNode:
         self._controls = {}
-        return self._build_node(self._window)
+        return self._build_node(self._window, is_root=True)
 
     def click(self, node: AccessibleNode) -> None:
         control = self._controls.get(node.identifier)
@@ -50,40 +53,78 @@ class UiaWindowSource:
             raise UiaSnapshotError("The retry control does not expose UIA Invoke.")
         invoke()
 
-    def _build_node(self, control: Any) -> AccessibleNode:
+    def _build_node(self, control: Any, *, is_root: bool = False) -> AccessibleNode:
         identifier = self._identifier(control)
         self._controls[identifier] = control
 
-        children = tuple(self._build_node(child) for child in control.children())
+        children: list[AccessibleNode] = []
+        try:
+            child_controls = control.children()
+            for child in child_controls:
+                try:
+                    children.append(self._build_node(child))
+                except Exception:
+                    LOGGER.debug("Skipping inaccessible UIA child", exc_info=True)
+        except Exception as error:
+            if is_root:
+                raise UiaSnapshotError(
+                    "The Codex UI Automation tree could not be read."
+                ) from error
+            LOGGER.debug("Skipping inaccessible UIA subtree", exc_info=True)
+
+        role = self._control_type(control)
         return AccessibleNode(
-            role=self._control_type(control),
+            role=role,
             name=self._name(control),
-            enabled=control.is_enabled(),
-            visible=control.is_visible(),
+            enabled=self._is_enabled(control) if role.casefold() == "button" else True,
+            visible=self._is_visible(control),
             identifier=identifier,
-            children=children,
+            children=tuple(children),
         )
 
     @staticmethod
     def _control_type(control: Any) -> str:
-        return str(getattr(control.element_info, "control_type", "") or "")
+        try:
+            return str(getattr(control.element_info, "control_type", "") or "")
+        except Exception:
+            return ""
 
     @staticmethod
     def _name(control: Any) -> str:
-        element_name = getattr(control.element_info, "name", None)
-        if element_name:
-            return str(element_name)
-        return str(control.window_text() or "")
+        try:
+            element_name = getattr(control.element_info, "name", None)
+            if element_name:
+                return str(element_name)
+            return str(control.window_text() or "")
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _is_enabled(control: Any) -> bool:
+        try:
+            return bool(control.is_enabled())
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_visible(control: Any) -> bool:
+        try:
+            return bool(control.is_visible())
+        except Exception:
+            return True
 
     @staticmethod
     def _identifier(control: Any) -> str:
-        element_info = control.element_info
-        runtime_id = getattr(element_info, "runtime_id", None)
-        if runtime_id:
-            return f"runtime:{runtime_id!r}"
+        try:
+            element_info = control.element_info
+            runtime_id = getattr(element_info, "runtime_id", None)
+            if runtime_id:
+                return f"runtime:{runtime_id!r}"
 
-        automation_id = getattr(element_info, "automation_id", None)
-        if automation_id:
-            return f"automation:{automation_id}"
+            automation_id = getattr(element_info, "automation_id", None)
+            if automation_id:
+                return f"automation:{automation_id}"
+        except Exception:
+            pass
 
         return f"control:{id(control)}"
