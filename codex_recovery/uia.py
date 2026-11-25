@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .detector import RECOVERY_ACTION_NAMES, AccessibleNode
+from .detector import CONTINUE_NAMES, RECOVERY_ACTION_NAMES, AccessibleNode, find_latest_continue
 
 LOGGER = logging.getLogger("codex_recovery.uia")
 
@@ -42,6 +42,10 @@ class UiaWindowSource:
         return self._build_node(self._window, is_root=True)
 
     def click(self, node: AccessibleNode) -> None:
+        if node.name.strip().casefold() in CONTINUE_NAMES:
+            match = find_latest_continue(self.snapshot())
+            if match is None or match.button.identifier != node.identifier:
+                raise UiaSnapshotError("The error recovery context has changed.")
         control = self._controls.get(node.identifier)
         if control is None:
             raise UiaSnapshotError("The control snapshot is stale. Read the window again.")

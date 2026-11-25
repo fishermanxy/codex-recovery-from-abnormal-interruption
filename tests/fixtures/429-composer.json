@@ -1,0 +1,160 @@
+{
+  "role": "Group",
+  "name": "对话",
+  "enabled": true,
+  "visible": true,
+  "identifier": "fixture",
+  "children": [
+    {
+      "role": "Group",
+      "name": "",
+      "enabled": true,
+      "visible": true,
+      "identifier": "fixture:0",
+      "children": [
+        {
+          "role": "Group",
+          "name": "",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:0:0",
+          "children": [
+            {
+              "role": "Image",
+              "name": "",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:0:0:0",
+              "children": []
+            },
+            {
+              "role": "Text",
+              "name": "exceeded retry limit, last status: 429 Too Many Requests",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:0:0:1",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "role": "Text",
+      "name": "最新一条回复",
+      "enabled": true,
+      "visible": true,
+      "identifier": "fixture:1",
+      "children": []
+    },
+    {
+      "role": "StatusBar",
+      "name": "",
+      "enabled": true,
+      "visible": true,
+      "identifier": "fixture:2",
+      "children": []
+    },
+    {
+      "role": "Group",
+      "name": "",
+      "enabled": true,
+      "visible": true,
+      "identifier": "fixture:3",
+      "children": [
+        {
+          "role": "Edit",
+          "name": "和 Codex 一起工作",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:0",
+          "children": [
+            {
+              "role": "Text",
+              "name": "和 Codex 一起工作",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:3:0:0",
+              "children": []
+            },
+            {
+              "role": "Text",
+              "name": "\n",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:3:0:1",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "Button",
+          "name": "添加文件等内容",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:1",
+          "children": []
+        },
+        {
+          "role": "Button",
+          "name": "更改权限",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:2",
+          "children": [
+            {
+              "role": "Text",
+              "name": "帮我批准",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:3:2:0",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "Button",
+          "name": "GPT-6 Sol 高",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:3",
+          "children": []
+        },
+        {
+          "role": "Button",
+          "name": "听写",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:4",
+          "children": [
+            {
+              "role": "Image",
+              "name": "",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:3:4:0",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "Button",
+          "name": "继续",
+          "enabled": true,
+          "visible": true,
+          "identifier": "fixture:3:5",
+          "children": [
+            {
+              "role": "Image",
+              "name": "",
+              "enabled": true,
+              "visible": true,
+              "identifier": "fixture:3:5:0",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -83,13 +83,28 @@ def test_click_revalidates_the_control_before_invoking_it():
 
 def test_click_accepts_a_continue_recovery_control():
     button = FakeControl(role="Button", name="继续")
-    root = FakeControl(children=(button,))
+    error = FakeControl(role="Text", name="exceeded retry limit")
+    root = FakeControl(role="Dialog", children=(error, button))
     source = UiaWindowSource(root)
     snapshot = source.snapshot()
 
-    source.click(snapshot.children[0])
+    source.click(snapshot.children[1])
 
     assert button.invoked is True
+
+
+def test_continue_rechecks_error_context_before_invocation():
+    button = FakeControl(role="Button", name="继续")
+    error = FakeControl(role="Text", name="exceeded retry limit")
+    root = FakeControl(role="Dialog", children=(error, button))
+    source = UiaWindowSource(root)
+    snapshot = source.snapshot()
+    root._children = (button,)
+
+    with pytest.raises(UiaSnapshotError):
+        source.click(snapshot.children[1])
+
+    assert button.invoked is False
 
 
 def test_click_rejects_a_control_whose_name_changed():

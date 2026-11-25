@@ -116,17 +116,69 @@ def find_latest_retry(root: AccessibleNode) -> RetryMatch | None:
 
 
 def find_latest_continue(root: AccessibleNode) -> RetryMatch | None:
-    """Find a continue button only inside a visible retry-limit error dialog.
+    """Find a Continue associated with a current retry-limit failure."""
 
-    A standalone continue button is intentionally ignored so a user-paused
-    conversation remains paused.
-    """
-
-    return _find_latest_action(
+    dialog_match = _find_latest_action(
         root,
         error_matcher=_is_retry_limit_error_text,
         button_matcher=_is_continue_button,
         action="continue",
         fallback_key=RETRY_LIMIT_ERROR_TEXTS[0],
         container_matcher=lambda node: node.role.casefold() == "dialog",
+    )
+    if dialog_match is not None:
+        return dialog_match
+
+    for conversation, _ in _walk(root):
+        if (
+            conversation.role.casefold() != "group"
+            or conversation.name.casefold() not in {"对话", "conversation"}
+        ):
+            continue
+        match = _find_composer_continue(conversation)
+        if match is not None:
+            return match
+    return None
+
+
+def _find_composer_continue(conversation: AccessibleNode) -> RetryMatch | None:
+    children = [child for child in conversation.children if child.visible]
+    if len(children) < 2:
+        return None
+    composer = list(_walk(children[-1]))
+    buttons = [node for node, _ in composer if _is_continue_button(node)]
+    edits = [node for node, _ in composer if node.role.casefold() == "edit"]
+    if len(buttons) != 1 or len(edits) != 1:
+        return None
+    edit = edits[0]
+    edit_text = [node.name.strip() for node, _ in _walk(edit) if node.role.casefold() == "text"]
+    if not edit_text or any(text and text != edit.name.strip() for text in edit_text):
+        return None
+
+    # Only idle UI markers may separate the terminal error card and composer.
+    preceding = children[:-1]
+    while preceding and (
+        (preceding[-1].role.casefold() == "statusbar" and not preceding[-1].name)
+        or (
+            preceding[-1].role.casefold() == "text"
+            and preceding[-1].name.strip().casefold() in {"最新一条回复", "latest response"}
+        )
+    ):
+        preceding.pop()
+    if not preceding or preceding[-1].role.casefold() != "group":
+        return None
+    card = preceding[-1]
+    card_nodes = [node for node, _ in _walk(card)]
+    texts = [node for node in card_nodes if node.role.casefold() == "text" and node.name.strip()]
+    if (
+        len(texts) != 1
+        or not texts[0].name.casefold().startswith("exceeded retry limit")
+        or not any(node.role.casefold() == "image" for node in card_nodes)
+        or any(node.role.casefold() in {"button", "edit"} for node in card_nodes)
+    ):
+        return None
+    return RetryMatch(
+        card_key=card.identifier or texts[0].identifier or texts[0].name,
+        button=buttons[0],
+        action="continue",
     )
