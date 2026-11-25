@@ -23,6 +23,24 @@ def error_card(identifier: str, *, enabled: bool = True) -> AccessibleNode:
     )
 
 
+def retry_limit_dialog(identifier: str = "dialog") -> AccessibleNode:
+    return AccessibleNode(
+        role="dialog",
+        identifier=identifier,
+        children=(
+            AccessibleNode(
+                role="text",
+                name="exceeded retry limit, last status: 429 Too Many Requests",
+            ),
+            AccessibleNode(
+                role="button",
+                name="继续",
+                identifier=f"{identifier}:continue",
+            ),
+        ),
+    )
+
+
 def test_processes_one_card_once() -> None:
     root = AccessibleNode(
         role="window",
@@ -63,3 +81,33 @@ def test_skips_disabled_retry() -> None:
 
     assert watcher.poll_once().status == "disabled"
     assert clicks == []
+
+
+def test_does_not_resume_a_manually_paused_conversation() -> None:
+    root = AccessibleNode(
+        role="window",
+        children=(
+            AccessibleNode(
+                role="dialog",
+                children=(AccessibleNode(role="button", name="继续"),),
+            ),
+        ),
+    )
+    clicks = []
+    watcher = RetryWatcher(lambda: root, clicks.append)
+
+    assert watcher.poll_once().status == "no_match"
+    assert clicks == []
+
+
+def test_resumes_a_retry_limit_dialog_once() -> None:
+    root = AccessibleNode(
+        role="window",
+        children=(retry_limit_dialog(),),
+    )
+    clicks = []
+    watcher = RetryWatcher(lambda: root, clicks.append)
+
+    assert watcher.poll_once().action == "continue"
+    assert watcher.poll_once().status == "already_processed"
+    assert len(clicks) == 1

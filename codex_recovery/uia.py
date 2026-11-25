@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .detector import RETRY_NAMES, AccessibleNode
+from .detector import RECOVERY_ACTION_NAMES, AccessibleNode
 
 LOGGER = logging.getLogger("codex_recovery.uia")
 
@@ -46,12 +46,18 @@ class UiaWindowSource:
         if control is None:
             raise UiaSnapshotError("The control snapshot is stale. Read the window again.")
         if not node.enabled:
-            raise UiaSnapshotError("The retry control is disabled.")
+            raise UiaSnapshotError("The recovery control is disabled.")
 
         if self._control_type(control).casefold() != "button":
             raise UiaSnapshotError("The target control is no longer a button.")
-        if self._name(control).strip().casefold() not in RETRY_NAMES:
-            raise UiaSnapshotError("The target control is no longer a retry button.")
+        current_name = self._name(control).strip().casefold()
+        if (
+            current_name not in RECOVERY_ACTION_NAMES
+            or current_name != node.name.strip().casefold()
+        ):
+            raise UiaSnapshotError(
+                "The target control is no longer a supported recovery action."
+            )
         try:
             enabled = bool(control.is_enabled())
             visible = bool(control.is_visible())

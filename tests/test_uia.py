@@ -81,12 +81,35 @@ def test_click_revalidates_the_control_before_invoking_it():
     assert button.invoked is True
 
 
+def test_click_accepts_a_continue_recovery_control():
+    button = FakeControl(role="Button", name="继续")
+    root = FakeControl(children=(button,))
+    source = UiaWindowSource(root)
+    snapshot = source.snapshot()
+
+    source.click(snapshot.children[0])
+
+    assert button.invoked is True
+
+
 def test_click_rejects_a_control_whose_name_changed():
     button = FakeControl(role="Button", name="重试")
     root = FakeControl(children=(button,))
     source = UiaWindowSource(root)
     snapshot = source.snapshot()
     button._name = "发送"
+
+    with pytest.raises(UiaSnapshotError):
+        source.click(snapshot.children[0])
+
+    assert button.invoked is False
+
+
+def test_click_rejects_retry_changed_to_continue():
+    button = FakeControl(role="Button", name="重试")
+    source = UiaWindowSource(FakeControl(children=(button,)))
+    snapshot = source.snapshot()
+    button._name = "继续"
 
     with pytest.raises(UiaSnapshotError):
         source.click(snapshot.children[0])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .detector import AccessibleNode, find_latest_retry
+from .detector import AccessibleNode, find_latest_continue, find_latest_retry
 
 
 @dataclass(frozen=True)
@@ -14,10 +14,11 @@ class PollResult:
 
     status: str
     card_key: str | None = None
+    action: str | None = None
 
 
 class RetryWatcher:
-    """Click the retry control once for each visible error-card occurrence."""
+    """Click each supported recovery control once per visible error occurrence."""
 
     def __init__(
         self,
@@ -29,17 +30,30 @@ class RetryWatcher:
         self._processed_card_key: str | None = None
 
     def poll_once(self) -> PollResult:
-        match = find_latest_retry(self._snapshot())
+        root = self._snapshot()
+        match = find_latest_retry(root) or find_latest_continue(root)
         if match is None:
             self._processed_card_key = None
             return PollResult(status="no_match")
 
         if not match.button.enabled:
-            return PollResult(status="disabled", card_key=match.card_key)
+            return PollResult(
+                status="disabled",
+                card_key=match.card_key,
+                action=match.action,
+            )
 
         if match.card_key == self._processed_card_key:
-            return PollResult(status="already_processed", card_key=match.card_key)
+            return PollResult(
+                status="already_processed",
+                card_key=match.card_key,
+                action=match.action,
+            )
 
         self._click(match.button)
         self._processed_card_key = match.card_key
-        return PollResult(status="clicked", card_key=match.card_key)
+        return PollResult(
+            status="clicked",
+            card_key=match.card_key,
+            action=match.action,
+        )

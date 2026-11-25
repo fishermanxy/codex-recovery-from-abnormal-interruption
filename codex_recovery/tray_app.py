@@ -99,6 +99,7 @@ def _load_tray_icon() -> int:
 class WorkerEvent:
     status: str
     card_key: str | None = None
+    action: str | None = None
     detail: str = ""
 
 
@@ -179,6 +180,7 @@ class WatchWorker:
                     WorkerEvent(
                         status=result.status,
                         card_key=result.card_key,
+                        action=result.action,
                     )
                 )
                 self._stop_event.wait(self._config.interval_seconds)
@@ -290,11 +292,21 @@ class TrayApplication:
             elif event.status == "paused":
                 self._update_tooltip("Codex Recovery：已暂停")
             elif event.status == "clicked":
-                self._update_tooltip("Codex Recovery：已重试")
+                tooltip = (
+                    "Codex Recovery：已继续"
+                    if event.action == "continue"
+                    else "Codex Recovery：已重试"
+                )
+                self._update_tooltip(tooltip)
                 if self._config.notify_on_retry:
+                    message = (
+                        "检测到重试限制，已自动点击继续。"
+                        if event.action == "continue"
+                        else "检测到模型容量错误，已自动点击重试。"
+                    )
                     self._notify(
                         "Codex Recovery",
-                        "检测到模型容量错误，已自动点击重试。",
+                        message,
                     )
             elif event.status == "error":
                 self._update_tooltip("Codex Recovery：连接异常")

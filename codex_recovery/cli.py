@@ -13,7 +13,7 @@ from .watcher import RetryWatcher
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Watch Codex for model-capacity errors and retry once per error card."
+        description="Watch Codex for recoverable errors and act once per error occurrence."
     )
     parser.add_argument("--window-title", default="ChatGPT")
     parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_SECONDS)
@@ -28,10 +28,10 @@ def main(argv: list[str] | None = None) -> int:
 
     def click(node: AccessibleNode) -> None:
         if args.dry_run:
-            print(f"dry-run: matched retry control {node.name!r}")
+            print(f"dry-run: matched recovery control {node.name!r}")
             return
         source.click(node)
-        print(f"clicked retry control {node.name!r}")
+        print(f"clicked recovery control {node.name!r}")
 
     watcher = RetryWatcher(source.snapshot, click)
 

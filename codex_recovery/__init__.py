@@ -4,6 +4,7 @@ from .detector import (
     ERROR_TEXT,
     AccessibleNode,
     RetryMatch,
+    find_latest_continue,
     find_latest_retry,
 )
 from .watcher import PollResult, RetryWatcher
@@ -14,5 +15,6 @@ __all__ = [
     "PollResult",
     "RetryMatch",
     "RetryWatcher",
+    "find_latest_continue",
     "find_latest_retry",
 ]
