@@ -31,3 +31,9 @@ python -m codex_recovery.tray_app
 ```
 
 生成文件为 `dist\CodexRecovery\CodexRecovery.exe`。运行时请保留这个目录中的依赖文件。
+
+## 许可证与图标
+
+项目原创代码和文档采用 [MIT 许可证](LICENSE)。第三方内容及其原始许可、署名见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+项目图标（`assets/codex-recovery.png` 和 `assets/codex-recovery.ico`）由作者使用 Codex 辅助生成。在作者有权授权的范围内，图标按 MIT 许可证提供。
