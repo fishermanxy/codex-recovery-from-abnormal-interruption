@@ -22,7 +22,8 @@ import win32gui
 
 from .config import AppConfig, default_config_path, load_config, save_config
 from .connection_notice import ConnectionRecoveryNotice
-from .startup import set_autostart
+from .lifecycle import CodexSession
+from .startup import is_autostart_enabled, set_autostart
 from .uia import UiaWindowSource
 from .watcher import RetryWatcher
 
@@ -32,6 +33,7 @@ WM_WORKER_EVENT = win32con.WM_USER + 21
 COMMAND_TOGGLE = 1001
 COMMAND_SETTINGS = 1002
 COMMAND_EXIT = 1003
+LIFECYCLE_TIMER = 1
 
 
 class _Guid(ctypes.Structure):
@@ -195,9 +197,18 @@ class WatchWorker:
 class TrayApplication:
     """Own the tray icon, settings dialog and worker lifecycle."""
 
-    def __init__(self, config: AppConfig, config_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        config_path: Path | None = None,
+        *,
+        session: CodexSession,
+    ) -> None:
         self._config = config
         self._config_path = config_path or default_config_path()
+        self._session = session
+        self._exiting = False
+        self._settings_root: tk.Tk | None = None
         self._events: queue.Queue[WorkerEvent] = queue.Queue()
         self._connection_notice = ConnectionRecoveryNotice()
         self._tooltip = "Codex Recovery"
@@ -209,7 +220,19 @@ class TrayApplication:
         self._worker.start()
 
     def run(self) -> None:
-        win32gui.PumpMessages()
+        user32 = ctypes.windll.user32
+        user32.SetTimer.argtypes = [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, wintypes.LPVOID]
+        user32.SetTimer.restype = ctypes.c_size_t
+        user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
+        user32.KillTimer.restype = wintypes.BOOL
+        if not user32.SetTimer(self._hwnd, LIFECYCLE_TIMER, 1000, None):
+            error = ctypes.WinError()
+            self._exit()
+            raise error
+        try:
+            win32gui.PumpMessages()
+        finally:
+            user32.KillTimer(self._hwnd, LIFECYCLE_TIMER)
 
     def _create_window(self) -> int:
         instance = win32api.GetModuleHandle(None)
@@ -276,8 +299,14 @@ class TrayApplication:
             raise ctypes.WinError()
 
     def _enqueue_event(self, event: WorkerEvent) -> None:
+        if self._exiting:
+            return
         self._events.put(event)
-        win32gui.PostMessage(self._hwnd, WM_WORKER_EVENT, 0, 0)
+        try:
+            win32gui.PostMessage(self._hwnd, WM_WORKER_EVENT, 0, 0)
+        except win32gui.error:
+            if not self._exiting:
+                raise
 
     def _drain_events(self) -> None:
         while True:
@@ -341,21 +370,16 @@ class TrayApplication:
 
     def _show_settings(self) -> None:
         root = tk.Tk()
+        self._settings_root = root
         root.title("Codex Recovery 设置")
         root.resizable(False, False)
 
         listening_var = tk.BooleanVar(value=self._config.listening_enabled)
-        autostart_var = tk.BooleanVar(value=self._config.autostart)
         notify_var = tk.BooleanVar(value=self._config.notify_on_retry)
 
         frame = tk.Frame(root, padx=18, pady=16)
         frame.pack()
         tk.Checkbutton(frame, text="启动监听", variable=listening_var).pack(anchor="w")
-        tk.Checkbutton(
-            frame,
-            text="登录 Windows 后自动启动",
-            variable=autostart_var,
-        ).pack(anchor="w")
         tk.Checkbutton(
             frame,
             text="自动重试后发送通知",
@@ -367,10 +391,8 @@ class TrayApplication:
 
         def save_and_close() -> None:
             self._config.listening_enabled = listening_var.get()
-            self._config.autostart = autostart_var.get()
             self._config.notify_on_retry = notify_var.get()
             save_config(self._config, self._config_path)
-            set_autostart(self._config.autostart)
             self._worker.set_enabled(self._config.listening_enabled)
             root.destroy()
 
@@ -380,9 +402,18 @@ class TrayApplication:
         )
         tk.Button(buttons, text="取消", command=root.destroy).pack(side="right")
         root.protocol("WM_DELETE_WINDOW", root.destroy)
-        root.mainloop()
+        try:
+            root.mainloop()
+        finally:
+            self._settings_root = None
 
     def _exit(self) -> None:
+        if self._exiting:
+            return
+        self._exiting = True
+        if self._settings_root is not None:
+            self._settings_root.destroy()
+            self._settings_root = None
         self._worker.stop()
         win32gui.Shell_NotifyIcon(
             win32gui.NIM_DELETE,
@@ -391,6 +422,12 @@ class TrayApplication:
         win32gui.DestroyWindow(self._hwnd)
 
     def _window_proc(self, hwnd, message, wparam, lparam):
+        if message == win32con.WM_TIMER and wparam == LIFECYCLE_TIMER:
+            if not self._exiting and not self._session.running:
+                LOGGER.info("Codex process exited; stopping recovery")
+                self._exit()
+                win32gui.PostQuitMessage(0)
+            return 0
         if message == WM_TRAY:
             if lparam == win32con.WM_LBUTTONDBLCLK:
                 self._show_settings()
@@ -438,8 +475,28 @@ def run_application() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     config = load_config(config_path)
-    application = TrayApplication(config, config_path)
-    application.run()
+    if is_autostart_enabled():
+        set_autostart(False)
+    if config.autostart:
+        config.autostart = False
+        save_config(config, config_path)
+    try:
+        session = CodexSession.start(window_title=config.window_title)
+    except Exception:
+        LOGGER.exception("Could not start Codex")
+        win32gui.MessageBox(
+            0,
+            "无法启动 Codex。请确认已安装 Codex，详情见 codex-recovery.log。",
+            "Codex Recovery",
+            win32con.MB_OK | win32con.MB_ICONERROR,
+        )
+        return 1
+    LOGGER.info("Following Codex process %s", session.process_id)
+    try:
+        application = TrayApplication(config, config_path, session=session)
+        application.run()
+    finally:
+        session.close()
     return 0
 
 
