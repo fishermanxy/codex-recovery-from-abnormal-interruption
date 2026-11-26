@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from .detector import AccessibleNode, find_latest_continue, find_latest_retry
+
+LOGGER = logging.getLogger("codex_recovery.watcher")
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,8 @@ class RetryWatcher:
         root = self._snapshot()
         match = find_latest_retry(root) or find_latest_continue(root)
         if match is None:
+            if not root.complete:
+                return PollResult(status="incomplete")
             self._processed_card_key = None
             return PollResult(status="no_match")
 
@@ -52,6 +57,24 @@ class RetryWatcher:
 
         self._click(match.button)
         self._processed_card_key = match.card_key
+        # Observe dismissal before the normal polling gap can hide a new
+        # failure that reuses the same UIA controls.
+        try:
+            root = self._snapshot()
+            current = find_latest_retry(root) or find_latest_continue(root)
+        except Exception:
+            LOGGER.warning(
+                "Could not verify the UI after recovery; retaining duplicate protection",
+                exc_info=True,
+            )
+        else:
+            if root.complete and (
+                current is None
+                or current.card_key != match.card_key
+                or not current.button.enabled
+            ):
+                self._processed_card_key = None
+                LOGGER.info("Recovery control dismissed or disabled: action=%s", match.action)
         return PollResult(
             status="clicked",
             card_key=match.card_key,

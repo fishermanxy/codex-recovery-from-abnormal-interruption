@@ -55,18 +55,14 @@ def test_processes_one_card_once() -> None:
 
 
 def test_processes_new_card_after_previous_card_disappears() -> None:
-    roots = iter(
-        (
-            AccessibleNode(role="window", children=(error_card("first"),)),
-            AccessibleNode(role="window"),
-            AccessibleNode(role="window", children=(error_card("second"),)),
-        )
-    )
+    root = AccessibleNode(role="window", children=(error_card("first"),))
     clicks = []
-    watcher = RetryWatcher(lambda: next(roots), clicks.append)
+    watcher = RetryWatcher(lambda: root, clicks.append)
 
     assert watcher.poll_once().status == "clicked"
+    root = AccessibleNode(role="window")
     assert watcher.poll_once().status == "no_match"
+    root = AccessibleNode(role="window", children=(error_card("second"),))
     assert watcher.poll_once().status == "clicked"
     assert len(clicks) == 2
 

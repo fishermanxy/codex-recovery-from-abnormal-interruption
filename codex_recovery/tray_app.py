@@ -9,6 +9,7 @@ import logging
 import queue
 import sys
 import threading
+import time
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
@@ -154,6 +155,8 @@ class WatchWorker:
 
     def _run_loop(self) -> None:
         paused_reported = False
+        last_status = None
+        next_log_at = 0.0
         while not self._stop_event.is_set():
             if not self._enabled_event.is_set():
                 if not paused_reported:
@@ -176,6 +179,20 @@ class WatchWorker:
                     new_connection = True
 
                 result = self._watcher.poll_once()
+                now = time.monotonic()
+                if (
+                    new_connection
+                    or result.status != last_status
+                    or result.status == "clicked"
+                    or now >= next_log_at
+                ):
+                    LOGGER.info(
+                        "Watcher poll completed: status=%s action=%s",
+                        result.status,
+                        result.action or "none",
+                    )
+                    last_status = result.status
+                    next_log_at = now + 300
                 if new_connection:
                     self._on_event(WorkerEvent("listening"))
                 self._on_event(

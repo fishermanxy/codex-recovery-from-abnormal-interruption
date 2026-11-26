@@ -1,7 +1,9 @@
 import pytest
 
+from codex_recovery.detector import ERROR_TEXT
 from codex_recovery.uia import UiaWindowSource
 from codex_recovery.uia import UiaSnapshotError
+from codex_recovery.watcher import RetryWatcher
 
 
 class FakeElementInfo:
@@ -130,3 +132,32 @@ def test_click_rejects_retry_changed_to_continue():
         source.click(snapshot.children[0])
 
     assert button.invoked is False
+
+
+@pytest.mark.parametrize('failure', ['enabled', 'children'])
+def test_partial_post_click_snapshot_does_not_rearm_recovery(failure):
+    button = FakeControl(role='Button', name='重试')
+    error = FakeControl(role='Text', name=ERROR_TEXT)
+    group = FakeControl(role='Group', children=(error, button))
+    source = UiaWindowSource(FakeControl(children=(group,)))
+    clicks = []
+    original_children = group.children
+
+    def unavailable_children():
+        raise RuntimeError('UIA refresh after recovery')
+
+    def click(node):
+        source.click(node)
+        clicks.append(node)
+        if failure == 'enabled':
+            button._fail_enabled = True
+        else:
+            group.children = unavailable_children
+
+    watcher = RetryWatcher(source.snapshot, click)
+
+    assert watcher.poll_once().status == 'clicked'
+    button._fail_enabled = False
+    group.children = original_children
+    assert watcher.poll_once().status == 'already_processed'
+    assert len(clicks) == 1

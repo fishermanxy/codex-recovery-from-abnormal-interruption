@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from .detector import CONTINUE_NAMES, RECOVERY_ACTION_NAMES, AccessibleNode, find_latest_continue
@@ -20,6 +21,7 @@ class UiaWindowSource:
     def __init__(self, window: Any) -> None:
         self._window = window
         self._controls: dict[str, Any] = {}
+        self._snapshot_complete = True
 
     @classmethod
     def connect(cls, title: str = "ChatGPT", timeout: float = 5.0) -> "UiaWindowSource":
@@ -39,7 +41,9 @@ class UiaWindowSource:
 
     def snapshot(self) -> AccessibleNode:
         self._controls = {}
-        return self._build_node(self._window, is_root=True)
+        self._snapshot_complete = True
+        root = self._build_node(self._window, is_root=True)
+        return replace(root, complete=self._snapshot_complete)
 
     def click(self, node: AccessibleNode) -> None:
         if node.name.strip().casefold() in CONTINUE_NAMES:
@@ -88,8 +92,10 @@ class UiaWindowSource:
                 try:
                     children.append(self._build_node(child))
                 except Exception:
+                    self._snapshot_complete = False
                     LOGGER.debug("Skipping inaccessible UIA child", exc_info=True)
         except Exception as error:
+            self._snapshot_complete = False
             if is_root:
                 raise UiaSnapshotError(
                     "The Codex UI Automation tree could not be read."
@@ -106,35 +112,35 @@ class UiaWindowSource:
             children=tuple(children),
         )
 
-    @staticmethod
-    def _control_type(control: Any) -> str:
+    def _control_type(self, control: Any) -> str:
         try:
             return str(getattr(control.element_info, "control_type", "") or "")
         except Exception:
+            self._snapshot_complete = False
             return ""
 
-    @staticmethod
-    def _name(control: Any) -> str:
+    def _name(self, control: Any) -> str:
         try:
             element_name = getattr(control.element_info, "name", None)
             if element_name:
                 return str(element_name)
             return str(control.window_text() or "")
         except Exception:
+            self._snapshot_complete = False
             return ""
 
-    @staticmethod
-    def _is_enabled(control: Any) -> bool:
+    def _is_enabled(self, control: Any) -> bool:
         try:
             return bool(control.is_enabled())
         except Exception:
+            self._snapshot_complete = False
             return False
 
-    @staticmethod
-    def _is_visible(control: Any) -> bool:
+    def _is_visible(self, control: Any) -> bool:
         try:
             return bool(control.is_visible())
         except Exception:
+            self._snapshot_complete = False
             return True
 
     @staticmethod

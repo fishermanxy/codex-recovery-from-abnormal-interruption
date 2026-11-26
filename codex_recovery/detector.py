@@ -25,6 +25,7 @@ class AccessibleNode:
     visible: bool = True
     identifier: str = ""
     children: tuple["AccessibleNode", ...] = ()
+    complete: bool = True
 
 
 @dataclass(frozen=True)
