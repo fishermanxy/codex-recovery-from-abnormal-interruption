@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -12,7 +13,8 @@ RETRY_LIMIT_ERROR_TEXTS = (
 )
 RETRY_NAMES = frozenset({"retry", "重试"})
 CONTINUE_NAMES = frozenset({"continue", "继续"})
-RECOVERY_ACTION_NAMES = RETRY_NAMES | CONTINUE_NAMES
+GOAL_RESUME_NAMES = frozenset({"resume goal", "恢复目标"})
+RECOVERY_ACTION_NAMES = RETRY_NAMES | CONTINUE_NAMES | GOAL_RESUME_NAMES
 
 
 @dataclass(frozen=True)
@@ -137,7 +139,7 @@ def find_latest_continue(root: AccessibleNode) -> RetryMatch | None:
         ):
             continue
         match = _find_composer_continue(conversation)
-        if match is not None:
+        if match is not None and (match.action != "resume_goal" or root.complete):
             return match
     return None
 
@@ -147,9 +149,22 @@ def _find_composer_continue(conversation: AccessibleNode) -> RetryMatch | None:
     if len(children) < 2:
         return None
     composer = list(_walk(children[-1]))
-    buttons = [node for node, _ in composer if _is_continue_button(node)]
+    buttons = [
+        node for node, _ in composer
+        if _is_named_button(node, CONTINUE_NAMES | GOAL_RESUME_NAMES)
+    ]
     edits = [node for node, _ in composer if node.role.casefold() == "edit"]
     if len(buttons) != 1 or len(edits) != 1:
+        return None
+    goal_resume = buttons[0].name.strip().casefold() in GOAL_RESUME_NAMES
+    if goal_resume and not any(
+        node.role.casefold() == "button"
+        and any(
+            node.name.casefold() == prefix or node.name.casefold().startswith(prefix + " ")
+            for prefix in ("目标已停滞", "goal stalled")
+        )
+        for node, _ in composer
+    ):
         return None
     edit = edits[0]
     edit_text = [node.name.strip() for node, _ in _walk(edit) if node.role.casefold() == "text"]
@@ -166,6 +181,8 @@ def _find_composer_continue(conversation: AccessibleNode) -> RetryMatch | None:
         )
     ):
         preceding.pop()
+    if goal_resume:
+        preceding = _without_goal_change_summary(preceding)
     if not preceding or preceding[-1].role.casefold() != "group":
         return None
     card = preceding[-1]
@@ -181,5 +198,47 @@ def _find_composer_continue(conversation: AccessibleNode) -> RetryMatch | None:
     return RetryMatch(
         card_key=card.identifier or texts[0].identifier or texts[0].name,
         button=buttons[0],
-        action="continue",
+        action="resume_goal" if goal_resume else "continue",
     )
+
+
+def _without_goal_change_summary(children: list[AccessibleNode]) -> list[AccessibleNode]:
+    """Ignore only the observed file-change footer after a failed goal turn."""
+    starts = [i for i, node in enumerate(children)
+              if node.role.casefold() == "button" and node.name == "查看已更改的文件"]
+    if not starts:
+        return children
+    start = starts[-1]
+    summary = children[start:]
+    prefix = (
+        ("button", "查看已更改的文件"),
+        ("image", ""),
+        ("text", r"已编辑 \d+ 个文件"),
+        ("text", r"\+\d+"),
+        ("text", r"-\d+"),
+        ("button", "撤销"),
+        ("button", "查看变更"),
+    )
+    if len(summary) < len(prefix) or any(
+        node.role.casefold() != role or re.fullmatch(pattern, node.name) is None
+        for node, (role, pattern) in zip(summary, prefix)
+    ):
+        return children
+    for index, node in enumerate(summary[len(prefix):], len(prefix)):
+        if (
+            index == len(summary) - 1
+            and node.role.casefold() == "button"
+            and re.fullmatch(r"再显示 \d+ 个文件", node.name)
+        ):
+            continue
+        rows = [child for child in node.children if child.visible]
+        if (
+            node.role.casefold() != "group"
+            or node.name
+            or len(rows) != 1
+            or rows[0].role.casefold() != "button"
+            or rows[0].children
+            or re.fullmatch(r".+ \+\d+ -\d+", rows[0].name) is None
+        ):
+            return children
+    return children[:start]

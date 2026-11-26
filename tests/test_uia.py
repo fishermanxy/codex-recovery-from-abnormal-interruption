@@ -1,6 +1,6 @@
 import pytest
 
-from codex_recovery.detector import ERROR_TEXT
+from codex_recovery.detector import ERROR_TEXT, find_latest_continue
 from codex_recovery.uia import UiaWindowSource
 from codex_recovery.uia import UiaSnapshotError
 from codex_recovery.watcher import RetryWatcher
@@ -161,3 +161,49 @@ def test_partial_post_click_snapshot_does_not_rearm_recovery(failure):
     group.children = original_children
     assert watcher.poll_once().status == 'already_processed'
     assert len(clicks) == 1
+
+
+def goal_controls():
+    status = FakeControl(role='Button', name='目标已停滞 Example goal')
+    button = FakeControl(role='Button', name='恢复目标')
+    edit = FakeControl(role='Edit', name='和 Codex 一起工作', children=(
+        FakeControl(role='Text', name='和 Codex 一起工作'),
+    ))
+    composer = FakeControl(role='Group', children=(status, button, edit))
+    card = FakeControl(role='Group', children=(
+        FakeControl(role='Image'),
+        FakeControl(role='Text', name='exceeded retry limit, last status: 429 Too Many Requests'),
+    ))
+    conversation = FakeControl(role='Group', name='对话', children=(card, composer))
+    source = UiaWindowSource(FakeControl(children=(conversation,)))
+    return source, card, status, button, edit
+
+
+def test_click_accepts_a_stalled_goal_recovery_control():
+    source, card, status, button, edit = goal_controls()
+    match = find_latest_continue(source.snapshot())
+
+    assert match is not None
+    source.click(match.button)
+
+    assert button.invoked is True
+
+
+@pytest.mark.parametrize('change', ['error_gone', 'paused', 'draft', 'renamed'])
+def test_goal_resume_rechecks_context_before_invocation(change):
+    source, card, status, button, edit = goal_controls()
+    match = find_latest_continue(source.snapshot())
+    assert match is not None
+    if change == 'error_gone':
+        card._children = ()
+    elif change == 'paused':
+        status._name = '目标已暂停 Example goal'
+    elif change == 'draft':
+        edit._children = (FakeControl(role='Text', name='my draft'),)
+    else:
+        button._name = '清除目标'
+
+    with pytest.raises(UiaSnapshotError):
+        source.click(match.button)
+
+    assert button.invoked is False

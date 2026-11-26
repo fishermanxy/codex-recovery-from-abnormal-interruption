@@ -338,18 +338,17 @@ class TrayApplication:
             elif event.status == "paused":
                 self._update_tooltip("Codex Recovery：已暂停")
             elif event.status == "clicked":
-                tooltip = (
-                    "Codex Recovery：已继续"
-                    if event.action == "continue"
-                    else "Codex Recovery：已重试"
-                )
+                if event.action == "resume_goal":
+                    tooltip = "Codex Recovery：已恢复目标"
+                    message = "检测到目标因重试限制而停滞，已自动恢复目标。"
+                elif event.action == "continue":
+                    tooltip = "Codex Recovery：已继续"
+                    message = "检测到重试限制，已自动点击继续。"
+                else:
+                    tooltip = "Codex Recovery：已重试"
+                    message = "检测到模型容量错误，已自动点击重试。"
                 self._update_tooltip(tooltip)
                 if self._config.notify_on_retry:
-                    message = (
-                        "检测到重试限制，已自动点击继续。"
-                        if event.action == "continue"
-                        else "检测到模型容量错误，已自动点击重试。"
-                    )
                     self._notify(
                         "Codex Recovery",
                         message,

@@ -6,7 +6,9 @@ import logging
 from dataclasses import replace
 from typing import Any
 
-from .detector import CONTINUE_NAMES, RECOVERY_ACTION_NAMES, AccessibleNode, find_latest_continue
+from .detector import (
+    CONTINUE_NAMES, GOAL_RESUME_NAMES, RECOVERY_ACTION_NAMES, AccessibleNode, find_latest_continue,
+)
 
 LOGGER = logging.getLogger("codex_recovery.uia")
 
@@ -46,7 +48,7 @@ class UiaWindowSource:
         return replace(root, complete=self._snapshot_complete)
 
     def click(self, node: AccessibleNode) -> None:
-        if node.name.strip().casefold() in CONTINUE_NAMES:
+        if node.name.strip().casefold() in CONTINUE_NAMES | GOAL_RESUME_NAMES:
             match = find_latest_continue(self.snapshot())
             if match is None or match.button.identifier != node.identifier:
                 raise UiaSnapshotError("The error recovery context has changed.")
