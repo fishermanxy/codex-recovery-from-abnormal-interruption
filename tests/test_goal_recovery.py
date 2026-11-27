@@ -40,6 +40,50 @@ def test_goal_without_change_summary_can_recover():
     assert match.action == 'resume_goal'
 
 
+def single_file_goal_conversation():
+    root = live_goal_conversation()
+    summary = list(root.children[1:8])
+    summary[2] = replace(summary[2], name='已编辑 visual-audit-progress.md')
+    summary[3] = replace(summary[3], name='+3')
+    summary[4] = replace(summary[4], name='-2')
+    group = AccessibleNode(role='Group', children=tuple(summary))
+    return replace(root, children=(root.children[0], group, *root.children[-3:]))
+
+
+def test_recovers_stalled_goal_with_single_file_summary():
+    clicks = []
+    watcher = RetryWatcher(single_file_goal_conversation, clicks.append)
+
+    assert watcher.poll_once().action == 'resume_goal'
+    assert len(clicks) == 1
+
+
+def test_single_file_summary_with_extra_content_blocks_recovery():
+    root = single_file_goal_conversation()
+    summary = root.children[1]
+    summary = replace(summary, children=(*summary.children, AccessibleNode(role='Text', name='later message')))
+    root = replace(root, children=(root.children[0], summary, *root.children[2:]))
+
+    assert find_latest_continue(root) is None
+
+
+def test_single_file_summary_followed_by_message_blocks_recovery():
+    root = single_file_goal_conversation()
+    activity = AccessibleNode(role='Text', name='A later message')
+    root = replace(root, children=(*root.children[:2], activity, *root.children[2:]))
+
+    assert find_latest_continue(root) is None
+
+
+def test_single_file_summary_with_paused_goal_blocks_recovery():
+    root = single_file_goal_conversation()
+    composer = root.children[-1]
+    status = replace(composer.children[0], name='目标已暂停 Example goal')
+    composer = replace(composer, children=(status, *composer.children[1:]))
+
+    assert find_latest_continue(replace(root, children=(*root.children[:-1], composer))) is None
+
+
 def test_latest_goal_error_can_recover_after_an_older_change_summary():
     root = live_goal_conversation()
     old_error = replace(root.children[0], identifier='old-error')

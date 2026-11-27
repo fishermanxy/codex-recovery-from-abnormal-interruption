@@ -203,7 +203,24 @@ def _find_composer_continue(conversation: AccessibleNode) -> RetryMatch | None:
 
 
 def _without_goal_change_summary(children: list[AccessibleNode]) -> list[AccessibleNode]:
-    """Ignore only the observed file-change footer after a failed goal turn."""
+    """Ignore only observed file-change footers after a failed goal turn."""
+    if children and children[-1].role.casefold() == "group" and not children[-1].name:
+        summary = [node for node in children[-1].children if node.visible]
+        single_file = (
+            ("button", r"查看已更改的文件"),
+            ("image", r""),
+            ("text", r"已编辑 .+"),
+            ("text", r"\+\d+"),
+            ("text", r"-\d+"),
+            ("button", r"撤销"),
+            ("button", r"查看变更"),
+        )
+        if len(summary) == len(single_file) and all(
+            node.role.casefold() == role and re.fullmatch(pattern, node.name) is not None
+            for node, (role, pattern) in zip(summary, single_file)
+        ):
+            return children[:-1]
+
     starts = [i for i, node in enumerate(children)
               if node.role.casefold() == "button" and node.name == "查看已更改的文件"]
     if not starts:
